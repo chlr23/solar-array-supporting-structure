@@ -46,13 +46,29 @@ def areamomentrect(w, h, t):
     Irect = (w*h**3-(w-2*t)*(h-2*t)**3)/12
     return(Irect)
 
+#define first moment of area calculations
+def qring(r, t, area):
+    centroid1 = ((4*r)/(3*math.pi)*math.pi*r**2*0.5-(4*(r-t))/(3*math.pi)*math.pi*(r-t)**2*0.5)/(math.pi*r**2*0.5-math.pi*(r-t)**2*0.5)
+    qri = area/2 * centroid1
+    return(qri)
+
+def qrect(w, h, t, area):
+    centroid = ((h/4)*w*h*0.5-((h-t)*0.5)*(w-2*t)*(h*0.5-t))/(w*h*0.5-(w-2*t)*(h*0.5-t))
+    qre = area/2 * centroid
+    return(qre)
+
+#define shear stress functions
+def shearstress(F, I, Q, t):
+    shear = (F*Q)/(I*t*2)
+    return(shear)
+
 #define functions for natural frequency
 def fnatlateral(E, I, m, l, mb):
     fnatlat = 0.276*math.sqrt((E*I)/(m*l**3+0.236*mb*l**3))
     return(fnatlat)
 
-def fnatlongitudinal(E, A, m, mb, l):
-    fnatlong = 0.160*math.sqrt((A*E)/(m*l+0.333*mb*l))
+def fnatlongitudinal(E, A, m, l, mb):
+    fnatlong = 0.160*math.sqrt((A*E)/(m*l+0.33*mb*l))
     return(fnatlong)
     
 #define beam mass function
@@ -81,13 +97,13 @@ def tensilestress(A, F):
 
 #make list of thicknesses to iterate through
 thicknesses = []
-for j in range(1, 10, 1):
+for j in range(1, 100, 1):
     thicknesses.append(j/10000)
 
 works = []
 masses = []
 
-length = 0.4
+length = 0.2
 
 #loop to iterate through many different combinations
 #loop through all materials
@@ -102,18 +118,23 @@ for material in materials:
         area = arearing(rcirc, thickness)
         mass = beammass(area, length, density)
         areamoment = areamomentring(rcirc, thickness)
-        latfnat = fnatlateral(Emod, areamoment, msa, length, mass)
+        firstareamoment = qring(rcirc, thickness, area)
+        latfnat = fnatlateral(Emod*10**9, areamoment, length, mass, msa)
         #print(latfnat)
-        longfnat = fnatlongitudinal(Emod, area, msa, mass, length)
+        longfnat = fnatlongitudinal(Emod*10**9, area, mass, length, msa)
         #print(longfnat)
         bend1 = (bendingstress(fbendlong, rcirc, areamoment, length) + tensilestress(area, fbendlat))/(10**6)
         #print(bend1)
         bend2 = (bendingstress(fbendlat, rcirc, areamoment, length) + tensilestress(area, fbendlat))/(10**6)
         #print(bend2)
         tors = torsionstresscirc(mtors, rcirc, thickness)/(10**6)
+        shear1 = shearstress(fbendlat, areamoment, firstareamoment, thickness)/(10**6)
+        shear2 = shearstress(fbendlong, areamoment, firstareamoment, thickness)/(10**6)
+        shear1max = tors + shear1
+        shear2max = tors + shear2
         combo.append(mass)
         masses.append(mass)
-        if bend1 < yieldstress and bend2 < yieldstress and tors < yieldstress and latfnat < latfreq and longfnat < longfreq:
+        if bend1 < yieldstress and bend2 < yieldstress and shear1max < yieldstress and shear2max < yieldstress and latfnat > latfreq and longfnat > longfreq:
             works.append(combo)
 minimum = masses.index(min(masses))
 print(works[minimum])
@@ -132,19 +153,28 @@ for material in materials:
         combo = [material, length, thickness]
         area = arearect(widthsa, rcirc*2, thickness)
         mass = beammass(area, length, density)
-        areamoment = areamomentrect(widthsa, 2*rcirc, thickness)
-        latfnat = fnatlateral(Emod, areamoment, msa, length, mass)
+        areamoment1 = areamomentrect(widthsa, 2*rcirc, thickness)
+        areamoment2 = areamomentrect(2*rcirc, widthsa, thickness)
+        firstareamoment1 = qrect(2*rcirc, widthsa, thickness, area)
+        firstareamoment2 = qrect(widthsa, 2*rcirc, thickness, area)
+        latfnat = fnatlateral(Emod*10**9, areamoment2, length, mass, msa)
         #print(latfnat)
-        longfnat = fnatlongitudinal(Emod, area, msa, mass, length)
+        longfnat = fnatlongitudinal(Emod*10**9, area, mass, length, msa)
         #print(longfnat)
-        bend1 = (bendingstress(fbendlong, rcirc, areamoment, length) + tensilestress(area, fbendlat))/(10**6)
+        bend1 = (bendingstress(fbendlong, rcirc, areamoment1, length) + tensilestress(area, fbendlat))/(10**6)
         #print(bend1)
-        bend2 = (bendingstress(fbendlat, rcirc, areamoment, length) + tensilestress(area, fbendlat))/(10**6)
+        bend2 = (bendingstress(fbendlat, widthsa/2, areamoment2, length) + tensilestress(area, fbendlat))/(10**6)
         #print(bend2)
         tors = torsionstressrect(2*rcirc, widthsa, thickness, mtors)/(10**6)
+        shear1 = shearstress(fbendlat, areamoment2, firstareamoment1, thickness)/(10**6)
+        shear2 = shearstress(fbendlong, areamoment1, firstareamoment2, thickness)/(10**6)
+        shear1max = tors + shear1
+        shear2max = tors + shear2
         combo.append(mass)
         masses2.append(mass)
-        if bend1 < yieldstress and bend2 < yieldstress and tors < yieldstress and latfnat < latfreq and longfnat < longfreq:
+        if bend1 < yieldstress and bend2 < yieldstress and shear1max < yieldstress and shear2max and latfnat > latfreq and longfnat > longfreq:
             works2.append(combo)
 minimum = masses2.index(min(masses2))
 print(works2[minimum])
+print(beammass(arearect(widthsa, rcirc*2, 0.0002), length, 2710))
+print(2*beammass(arearect(widthsa, rcirc*2, 0.0002), length, 2710))
